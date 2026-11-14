@@ -12,7 +12,10 @@ router = APIRouter(prefix="/api/jsrender", tags=["JS渲染采集"])
 
 service = JsrenderService()
 
-LIST_FIELDS = ["配置编号", "目标URL", "浏览器类型", "渲染等待秒", "滚动次数", "点击选择器", "页面等待条件", "截屏开关"]
+LIST_FIELDS = [
+    "配置编号", "目标URL", "浏览器类型", "渲染等待秒", "滚动次数", "点击选择器",
+    "页面等待条件", "截屏开关", "渲染结果",
+]
 STATUSES = ["草稿", "渲染测试中", "已上线", "已降级"]
 
 

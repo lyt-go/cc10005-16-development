@@ -27,6 +27,12 @@ class Store:
                 return row
         return None
 
+    def reset(self) -> None:
+        """把内存表恢复为示例数据；仅用于本地验证与测试。"""
+        self._tables = {
+            name: [dict(row) for row in rows] for name, rows in SEED_ROWS.items()
+        }
+
     def overview(self) -> dict[str, object]:
         modules: list[dict[str, object]] = []
         for name in self.module_names():

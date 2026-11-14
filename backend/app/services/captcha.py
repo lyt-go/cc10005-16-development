@@ -9,7 +9,15 @@ MODULE = "captcha"
 REQUIRED_FIELDS = ["策略编号", "验证码类型", "识别服务商"]
 STATUS_ORDER = ["草稿", "策略验证中", "已启用", "已降级"]
 ACTION_RULES = {"提交策略验证": "策略验证中", "启用策略": "已启用", "降级策略": "已降级"}
-NEGATIVE_ACTIONS = []
+NEGATIVE_ACTIONS = ["降级策略"]
+OPTIONAL_FIELDS = ["识别超时秒", "重试次数上限", "降级策略", "手动打码开关", "打码等待队列", "打码等待超时秒"]
+# 严格单向：不允许回退，也不允许跨状态跳转。
+NEXT_STATUS = {
+    "草稿": {"策略验证中"},
+    "策略验证中": {"已启用", "已降级"},
+    "已启用": {"已降级"},
+    "已降级": set(),
+}
 
 
 class CaptchaService:
@@ -40,6 +48,9 @@ class CaptchaService:
         rows = store.rows(MODULE)
         entry = {"id": max((int(row.get("id", 0)) for row in rows), default=0) + 1}
         entry.update({field: values.get(field) for field in REQUIRED_FIELDS})
+        for field in OPTIONAL_FIELDS:
+            if values.get(field) is not None:
+                entry[field] = values.get(field)
         entry["status"] = STATUS_ORDER[0]
         entry["pending"] = True
         entry["abnormal"] = False
@@ -55,7 +66,13 @@ class CaptchaService:
         target = ACTION_RULES[action]
         if target not in STATUS_ORDER:
             return None, f"目标状态「{target}」不在允许的状态序列里"
+        current = str(entry.get("status") or "")
+        if target not in NEXT_STATUS.get(current, set()):
+            return None, (
+                f"验证码策略当前为「{current}」，只能沿生命周期前进到"
+                f"「{'/'.join(sorted(NEXT_STATUS.get(current, set()))) or '无'}」，不能变更为「{target}」"
+            )
         entry["status"] = target
-        entry["pending"] = target != STATUS_ORDER[-1]
+        entry["pending"] = target == "策略验证中"
         entry["abnormal"] = action in NEGATIVE_ACTIONS
         return entry, f"验证码策略已{action}"

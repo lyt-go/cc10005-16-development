@@ -11,7 +11,8 @@ const columns = [
   "滚动次数",
   "点击选择器",
   "页面等待条件",
-  "截屏开关"
+  "截屏开关",
+  "渲染结果"
 ]
 const actions = [
   "提交渲染测试",
@@ -41,10 +42,26 @@ const stats = [
 
 type Row = Record<string, string | number | null>
 
+function renderResultText(value: string | number | null | undefined) {
+  if (!value || typeof value !== 'object') {
+    return '—'
+  }
+  const result = value as Record<string, unknown>
+  const parts = [
+    result["渲染状态"] ? `渲染：${result["渲染状态"]}` : '',
+    result["分流结论"] ? `分流：${result["分流结论"]}` : '',
+    result["识别状态"] ? `识别：${result["识别状态"]}` : '',
+    result["降级生效"] ? `降级：${result["降级原因"] || result["降级策略"]}` : '',
+    result["打码等待队列"] ? `队列：${result["打码等待队列"]}` : '',
+  ].filter(Boolean)
+  return parts.length ? parts.join('；') : '—'
+}
+
 export default function JsrenderView() {
   const [rows, setRows] = useState<Row[]>([])
   const [total, setTotal] = useState(0)
   const [errorMessage, setErrorMessage] = useState('')
+  const [notice, setNotice] = useState('')
   const [filters, setFilters] = useState<Record<string, string>>({})
   const filterFields = useMemo(() => columns.slice(0, 3), [])
 
@@ -81,6 +98,31 @@ export default function JsrenderView() {
       await reload()
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'JS渲染采集操作失败')
+    }
+  }
+
+  async function runChallenge(row: Row) {
+    setErrorMessage('')
+    const policy = window.prompt('请输入本次渲染命中的验证码策略编号（如 CAPT-0002 / CAPT-0003）', 'CAPT-0003')
+    if (!policy) {
+      return
+    }
+    try {
+      const response = await request('/api/challenge/submit', {
+        method: 'POST',
+        body: JSON.stringify({ values: { 渲染配置ID: row.id, 验证码策略编号: policy } }),
+      })
+      const payload = await response.json()
+      if (!response.ok) {
+        throw new Error('挑战分流请求未送达')
+      }
+      setErrorMessage(payload.ok ? '' : payload.message)
+      if (payload.ok) {
+        setNotice(payload.message)
+      }
+      await reload()
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : '挑战分流失败')
     }
   }
 
@@ -135,8 +177,17 @@ export default function JsrenderView() {
         <tbody>
           {rows.map((row) => (
             <tr key={String(row.id)}>
-              {columns.map((column) => <td key={column}>{row[column] ?? '—'}</td>)}
+              {columns.map((column) => (
+                <td key={column}>
+                  {column === "渲染结果"
+                    ? renderResultText(row[column])
+                    : row[column] ?? '—'}
+                </td>
+              ))}
               <td className="row-actions">
+                <button className="link" type="button" onClick={() => void runChallenge(row)}>
+                  发起挑战分流
+                </button>
                 {actions.map((action) => (
                   <button key={action} className="link" type="button" onClick={() => void runAction(action, row)}>
                     {action}
@@ -155,6 +206,7 @@ export default function JsrenderView() {
 
       <footer className="page-foot">
         <span>共 {total} 条JS渲染采集记录</span>
+        {notice && <span>{notice}</span>}
         {errorMessage && <span className="error-text">{errorMessage}</span>}
       </footer>
     </section>
